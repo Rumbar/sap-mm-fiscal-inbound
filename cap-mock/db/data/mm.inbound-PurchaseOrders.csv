@@ -1,0 +1,3 @@
+PurchaseOrder;CompanyCode;PurchasingOrg;Supplier_Supplier;DocumentCurrency;PurchaseOrderDate;Status
+4500000101;1000;1000;FORN1000;BRL;2026-06-15;Released
+4500000102;1000;1000;FORN2000;BRL;2026-06-20;Released

@@ -1,0 +1,23 @@
+{
+  "name": "s4-mm-inbound-mock",
+  "version": "1.0.0",
+  "description": "Mock CAP de APIs S/4HANA para processo MM inbound fiscal (MIGO/MIRO + NF-e)",
+  "scripts": {
+    "start": "cds serve --port 4004"
+  },
+  "dependencies": {
+    "@sap/cds": "^8",
+    "express": "^4",
+    "sqlite3": "^6.0.1"
+  },
+  "cds": {
+    "requires": {
+      "db": {
+        "kind": "sqlite",
+        "credentials": {
+          "url": ":memory:"
+        }
+      }
+    }
+  }
+}
