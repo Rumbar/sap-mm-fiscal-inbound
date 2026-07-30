@@ -36,11 +36,12 @@ flowchart TD
 |---|---|
 | Validação estrutural da NF-e | Monitor de NF-e / GRC NF-e (cockpit J1B*) |
 | Cálculo e conferência de impostos | J1BTAX |
-| Determinação de CFOP | J1BAA / J1BAG |
-| Tolerância de preço na fatura | Chaves de tolerância — OMR6 |
+| Determinação de CFOP | J1BTAX → CFOP Determinação MM (J_1BAONV) |
+| Tolerância de preço na fatura | Chaves de tolerância — OMR6 (PP / DQ) |
 | Tolerância de quantidade | Item do pedido — sub/sobreentrega |
 | Entrada de mercadoria | MIGO — movimento 101 |
 | Fatura do fornecedor | MIRO — com vínculo do documento fiscal |
+| Liberação de fatura bloqueada | MRBR |
 
 A lista completa, com motivo de negócio e comportamento em caso de falha, está na **[matriz de regras](docs/01-matriz-de-regras.md)**.
 
@@ -57,8 +58,8 @@ A lista completa, com motivo de negócio e comportamento em caso de falha, está
 | ICMS destacado a menor | Consistência base × alíquota | Bloqueado |
 | NF-e já lançada | Duplicidade por chave de acesso | Rejeitado |
 | Fatura sem entrada de mercadoria | GR-based IV | Rejeitado |
-| Entrada acima da qtde aberta | Sobreentrega (msg M7) | Rejeitado |
-| Fatura com valor divergente | Bloqueio R | Rejeitado |
+| Entrada acima da qtde aberta | Sobreentrega (msg M7 022) | Rejeitado |
+| Fatura com valor divergente | Bloqueio automático para pagamento | Rejeitado |
 
 Evidência de execução de todos os casos no **[plano de testes](docs/02-plano-de-testes.md)**.
 
@@ -75,7 +76,7 @@ XML da NF-e  ──HTTP──▶  n8n (orquestração)  ──OData v4──▶ 
 
 **Camada de orquestração — n8n.** Recebe o XML, valida o documento fiscal, consulta o pedido, executa o three-way match e decide entre lançar ou bloquear. Em maio de 2026 a SAP fez investimento estratégico na n8n e firmou parceria para embarcar a plataforma no Joule Studio — este projeto usa exatamente esse padrão de orquestração sobre as APIs do S/4.
 
-**Sistema de registro — mock S/4HANA em SAP CAP.** Expõe APIs OData v4 seguindo a nomenclatura das APIs oficiais (`API_PURCHASE_ORDER_SRV`, `API_MATERIAL_DOCUMENT_SRV`, `API_SUPPLIERINVOICE_PROCESS_SRV`) e implementa as regras do lado do sistema: pedido liberado, quantidade em aberto, GR-based IV, bloqueio R e duplicidade por chave.
+**Sistema de registro — mock S/4HANA em SAP CAP.** Expõe APIs OData v4 seguindo a nomenclatura das APIs oficiais (`API_PURCHASE_ORDER_SRV`, `API_MATERIAL_DOCUMENT_SRV`, `API_SUPPLIERINVOICE_PROCESS_SRV`) e implementa as regras do lado do sistema: pedido liberado, quantidade em aberto, GR-based IV, bloqueio automático de fatura por tolerância e duplicidade por chave.
 
 As validações existem **dos dois lados de propósito**: o orquestrador valida antes de chamar, e o sistema de registro valida de novo e rejeita — porque um sistema de registro nunca confia cegamente no integrador. Os casos CT-06 a CT-09 do plano de testes provam isso chamando as APIs diretamente, sem passar pelo n8n.
 
