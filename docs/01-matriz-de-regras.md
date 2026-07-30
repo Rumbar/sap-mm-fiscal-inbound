@@ -16,6 +16,7 @@ Executada antes de qualquer consulta ao pedido. É o papel do monitor de NF-e (G
 |---|---|---|---|---|
 | E1 | Chave de acesso deve ter 44 dígitos e DV válido (módulo 11, pesos 2–9) | Validação do inbound de NF-e / GRC NF-e | Chave inválida indica XML corrompido ou adulterado; a chave é o identificador único do documento perante a SEFAZ | Bloqueante |
 | E2 | CFOP informado deve ser de saída do emitente (5xxx, 6xxx ou 7xxx) | Determinação de CFOP — J1BTAX → CFOP Determinação MM (tabela J_1BAONV) | O fornecedor emite com CFOP de saída; se vier 1xxx algo está invertido no documento | Bloqueante |
+| E5 | Dígito verificador do CNPJ do emitente | Validação de dados mestres de fornecedor | Não implementado — ver limitações declaradas | — |
 | E3 | ICMS destacado deve ser igual a base × alíquota (tolerância R$ 0,02) | Cálculo de imposto — J1BTAX | Destaque inconsistente gera crédito indevido e risco em fiscalização | Bloqueante |
 | E4 | NF-e não pode ter sido lançada anteriormente (chave já existente) | Verificação de duplicidade no docto fiscal | Evita duplicidade de crédito de ICMS/IPI e duplicidade de pagamento ao fornecedor | Bloqueante |
 
@@ -31,19 +32,33 @@ Executada após buscar o pedido no S/4 (`API_PURCHASE_ORDER_SRV`).
 | M2 | CNPJ do emitente deve ser o CNPJ do fornecedor do pedido | Dados mestres do fornecedor — campo STCD1 (BP) | Nota de terceiro contra pedido próprio indica erro de emissão ou tentativa de fraude | Bloqueante |
 | M3 | Quantidade da NF-e não pode exceder a quantidade em aberto do item | Tolerância de sobreentrega no item do pedido, herdada do registro info de compras ou do cadastro do material | Recebimento acima do contratado gera estoque e obrigação de pagamento não autorizados | Bloqueante (msg M7 022) |
 | M4 | Preço unitário da NF-e deve bater com o preço líquido do item (tolerância 1%) | Chaves de tolerância — OMR6 (PP = variação de preço; DQ = variação de quantidade), por empresa | Divergência de preço é a causa mais comum de pagamento indevido a fornecedor | Bloqueio automático da fatura para pagamento; liberação por MRBR |
-| M5 | CFOP de entrada derivado deve ser o esperado para o item | Determinação de CFOP — J1BTAX → CFOP Determinação MM (tabela J_1BAONV), por categoria do material, tipo de item da NF e destinação | O CFOP define o direito a crédito e a natureza da operação na escrituração | Bloqueante |
+| M5a | Abrangência geográfica: o primeiro dígito do CFOP de saída deve corresponder ao primeiro dígito do CFOP de entrada do item | Determinação de CFOP — J1BTAX → CFOP Determinação MM (tabela J_1BAONV) | Operação interna escriturada como interestadual (ou vice-versa) distorce apuração e obrigações acessórias | Bloqueante |
+| M5b | Natureza da operação do fornecedor deve ser compatível com a destinação do material | Cadastro do material (categoria de CFOP) e tipo de item da NF | Venda de ativo imobilizado recebida como compra para industrialização gera crédito e classificação contábil indevidos | Bloqueante |
 | M6 | NCM da NF-e deve conferir com o cadastro do material | Dados mestres do material — visão Comércio Exterior / grupo de imposto | NCM errado leva a alíquota e tratamento tributário errados na cadeia | Bloqueante |
 | M7 | Alíquota de ICMS deve corresponder à operação (interna MG = 18%, art. 42, I, "e" do RICMS/MG) | Tabelas de alíquota — J1BTAX / condições de imposto | Crédito de ICMS a maior ou a menor gera passivo fiscal | Bloqueante |
 
-### Derivação de CFOP aplicada (regra M5)
+### Como o CFOP de entrada é determinado (regras M5a e M5b)
 
-| CFOP de saída do fornecedor | CFOP de entrada correspondente | Natureza |
+O CFOP de entrada **não é uma tradução mecânica** do CFOP do fornecedor. Só o primeiro dígito é derivável dele:
+
+| Primeiro dígito na saída | Primeiro dígito na entrada | Abrangência |
 |---|---|---|
-| 5xxx (dentro do estado) | 1xxx | Operação interna |
-| 6xxx (fora do estado) | 2xxx | Operação interestadual |
-| 7xxx (exterior) | 3xxx | Importação |
+| 5 | 1 | Operação interna |
+| 6 | 2 | Operação interestadual |
+| 7 | 3 | Importação |
 
-Exemplo do cenário modelado: fornecedor em MG emite **5102** (venda de mercadoria adquirida de terceiros) → entrada esperada **1102** (compra para comercialização).
+Os três dígitos restantes vêm da **destinação que o comprador dá ao material** — informação que está no cadastro do material e no tipo de item da NF, não no documento do fornecedor. O mesmo CFOP 5102 pode gerar entrada 1101 (industrialização), 1102 (comercialização) ou 1556 (uso e consumo), dependendo do comprador.
+
+O que se valida, então, é a **compatibilidade** entre a natureza da operação do fornecedor e a destinação esperada:
+
+| Natureza na saída | Destinações compatíveis na entrada |
+|---|---|
+| 101 — venda de produção do estabelecimento | 101 (industrialização), 102 (comercialização) |
+| 102 — venda de mercadoria adquirida de terceiros | 101, 102 |
+| 551 — venda de bem do ativo imobilizado | 551 |
+| 556 — venda de material de uso e consumo | 556 |
+
+Cenário modelado: fornecedor em MG emite **5101** contra um pedido de chapa de aço destinada a industrialização, cujo CFOP de entrada esperado é **1101**. Compatível. Já um **5551** contra o mesmo pedido é rejeitado — venda de ativo não corresponde a compra de insumo.
 
 ---
 
@@ -83,7 +98,11 @@ A lista completa é intencional: o analista fiscal precisa ver todos os problema
 
 **O que este modelo cobre**: fluxo de compra de material para estoque, operação nacional, NF-e modelo 55 com item único, tributação ICMS/IPI.
 
-**O que este modelo não cobre**: ICMS-ST e substituição tributária, DIFAL, notas com múltiplos itens e rateio, importação (CFOP 3xxx e adições de DI), serviços (NFS-e e ISS), devoluções e notas complementares, remessa e retorno de industrialização.
+**O que este modelo não cobre**: ICMS-ST e substituição tributária, DIFAL, PIS e COFINS, notas com múltiplos itens e rateio, importação (CFOP 3xxx e adições de DI), serviços (NFS-e e ISS), devoluções e notas complementares, remessa e retorno de industrialização, validação do dígito verificador de CNPJ, e a representação do documento fiscal em si (no S/4HANA a NF-e gera um documento próprio, `J_1BNFDOC`, vinculado ao documento de material — aqui a chave é gravada apenas como campo da fatura).
+
+**Sobre os XMLs de teste**: são uma versão reduzida do leiaute 4.00, sem `protNFe`, sem assinatura digital e sem os grupos completos exigidos pela SEFAZ. Servem para exercitar as regras do processo, não para validar leiaute.
+
+**Sobre as alíquotas usadas**: a alíquota de ICMS de 18% foi verificada contra o RICMS/MG. A alíquota de IPI de 5% aplicada nos XMLs é ilustrativa e não foi conferida contra a TIPI para a NCM específica.
 
 **Pontos verificados em documentação pública** (SAP Community, SAP Help, SAP Learning, RICMS/MG): chaves de tolerância PP e DQ na OMR6 por empresa; mensagem M7 022 para sobreentrega em recebimento contra pedido, com tolerância herdada do registro info ou do cadastro do material; determinação de CFOP de entrada pela J1BTAX → CFOP Determinação MM (tabela `J_1BAONV`), sendo `J_1BAPNV` a equivalente de saída em SD; alíquota interna de ICMS em MG de 18% (art. 42, I, "e" do RICMS/MG), com exceções por produto e adicional do FEM em itens específicos; mecanismo de bloqueio automático de fatura e liberação pela MRBR.
 

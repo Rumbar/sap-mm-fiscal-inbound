@@ -12,8 +12,24 @@
       "name": "Webhook NF-e",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-600, 0],
+      "position": [
+        -600,
+        0
+      ],
       "webhookId": "nfe-inbound"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { xml: $json.body.xml } }];"
+      },
+      "id": "a1000000-0000-0000-0000-000000000011",
+      "name": "Extrai XML do payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -500,
+        0
+      ]
     },
     {
       "parameters": {
@@ -25,17 +41,23 @@
       "name": "Parse XML NF-e",
       "type": "n8n-nodes-base.xml",
       "typeVersion": 1,
-      "position": [-400, 0]
+      "position": [
+        -300,
+        0
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// ===== Validações estruturais e fiscais da NF-e (papel do GRC NF-e / J1B*) =====\nconst body = $json.body ?? $json;\nconst raiz = body.xml ?? body;\nconst nfe = raiz.nfeProc?.NFe?.infNFe ?? raiz.NFe?.infNFe;\nif (!nfe) throw new Error('XML não é uma NF-e válida (infNFe não encontrado)');\nconst det = Array.isArray(nfe.det) ? nfe.det[0] : nfe.det;\nconst prod = det.prod;\nconst chave = String(nfe.$?.Id ?? nfe.Id ?? '').replace('NFe', '');\n\n// --- Dígito verificador da chave de acesso (módulo 11, pesos 2..9) ---\nconst pesos = [2, 3, 4, 5, 6, 7, 8, 9];\nlet soma = 0;\n[...chave.slice(0, 43)].reverse().forEach((d, i) => { soma += Number(d) * pesos[i % 8]; });\nconst resto = soma % 11;\nconst dv = (resto === 0 || resto === 1) ? '0' : String(11 - resto);\n\nconst erros = [];\nif (chave.length !== 44) {\n  erros.push(`Chave de acesso com ${chave.length} dígitos (esperado 44)`);\n} else if (dv !== chave[43]) {\n  erros.push(`DV da chave de acesso inválido (calculado ${dv}, informado ${chave[43]})`);\n}\n\n// --- Mapeamento CFOP de saída do fornecedor -> CFOP de entrada nossa ---\n// 5xxx (dentro do estado) -> 1xxx | 6xxx (fora do estado) -> 2xxx | 7xxx (exterior) -> 3xxx\nconst cfopSaida = String(prod.CFOP);\nconst mapa = { '5': '1', '6': '2', '7': '3' };\nconst cfopEntrada = (mapa[cfopSaida[0]] ?? '?') + cfopSaida.slice(1);\nif (!mapa[cfopSaida[0]]) {\n  erros.push(`CFOP ${cfopSaida} não é CFOP de saída do fornecedor (esperado 5xxx/6xxx/7xxx)`);\n}\n\nconst icms = det.imposto?.ICMS?.ICMS00 ?? {};\nconst ipi = det.imposto?.IPI?.IPITrib ?? {};\n\nreturn [{ json: {\n  chave,\n  errosEstruturais: erros,\n  cnpjEmitente: String(nfe.emit.CNPJ),\n  nomeEmitente: nfe.emit.xNome,\n  numeroNF: String(nfe.ide.nNF),\n  pedido: String(prod.xPed ?? ''),\n  itemPedido: String(prod.nItemPed ?? '').padStart(5, '0').replace(/^000(\\d0)$/, '000$1'),\n  material: prod.cProd,\n  ncm: String(prod.NCM),\n  cfopSaida,\n  cfopEntrada,\n  quantidade: Number(prod.qCom),\n  valorUnitario: Number(prod.vUnCom),\n  valorProdutos: Number(prod.vProd),\n  vBC: Number(icms.vBC ?? 0),\n  pICMS: Number(icms.pICMS ?? 0),\n  vICMS: Number(icms.vICMS ?? 0),\n  pIPI: Number(ipi.pIPI ?? 0),\n  vIPI: Number(ipi.vIPI ?? 0),\n  valorTotalNF: Number(nfe.total.ICMSTot.vNF)\n} }];"
+        "jsCode": "// ===== Validações estruturais e fiscais da NF-e (papel do GRC NF-e / J1B*) =====\nconst body = $json.body ?? $json;\nconst raiz = body.xml ?? body;\nconst nfe = raiz.nfeProc?.NFe?.infNFe ?? raiz.NFe?.infNFe;\nif (!nfe) throw new Error('XML não é uma NF-e válida (infNFe não encontrado)');\nconst det = Array.isArray(nfe.det) ? nfe.det[0] : nfe.det;\nconst prod = det.prod;\nconst chave = String(nfe.$?.Id ?? nfe.Id ?? '').replace('NFe', '');\n\n// --- Dígito verificador da chave de acesso (módulo 11, pesos 2..9) ---\nconst pesos = [2, 3, 4, 5, 6, 7, 8, 9];\nlet soma = 0;\n[...chave.slice(0, 43)].reverse().forEach((d, i) => { soma += Number(d) * pesos[i % 8]; });\nconst resto = soma % 11;\nconst dv = (resto === 0 || resto === 1) ? '0' : String(11 - resto);\n\nconst erros = [];\nif (chave.length !== 44) {\n  erros.push(`Chave de acesso com ${chave.length} dígitos (esperado 44)`);\n} else if (dv !== chave[43]) {\n  erros.push(`DV da chave de acesso inválido (calculado ${dv}, informado ${chave[43]})`);\n}\n\n// --- Abrangência geográfica da operação ---\n// Só o primeiro dígito é derivável do CFOP do fornecedor: 5=interna, 6=interestadual,\n// 7=exterior. Os três últimos dígitos do CFOP de ENTRADA vêm da destinação que o\n// comprador dá ao material, não da operação do vendedor.\nconst cfopSaida = String(prod.CFOP);\nconst mapa = { '5': '1', '6': '2', '7': '3' };\nconst digitoEntrada = mapa[cfopSaida[0]];\nif (!digitoEntrada) {\n  erros.push(`CFOP ${cfopSaida} não é CFOP de saída do fornecedor (esperado 5xxx/6xxx/7xxx)`);\n}\n\nconst icms = det.imposto?.ICMS?.ICMS00 ?? {};\nconst ipi = det.imposto?.IPI?.IPITrib ?? {};\n\nreturn [{ json: {\n  chave,\n  errosEstruturais: erros,\n  cnpjEmitente: String(nfe.emit.CNPJ),\n  nomeEmitente: nfe.emit.xNome,\n  numeroNF: String(nfe.ide.nNF),\n  naturezaOperacao: nfe.ide.natOp,\n  pedido: String(prod.xPed ?? ''),\n  itemPedido: String(prod.nItemPed ?? ''),\n  material: prod.cProd,\n  ncm: String(prod.NCM),\n  cfopSaida,\n  digitoEntrada,\n  quantidade: Number(prod.qCom),\n  valorUnitario: Number(prod.vUnCom),\n  valorProdutos: Number(prod.vProd),\n  vBC: Number(icms.vBC ?? 0),\n  pICMS: Number(icms.pICMS ?? 0),\n  vICMS: Number(icms.vICMS ?? 0),\n  pIPI: Number(ipi.pIPI ?? 0),\n  vIPI: Number(ipi.vIPI ?? 0),\n  valorTotalNF: Number(nfe.total.ICMSTot.vNF)\n} }];"
       },
       "id": "a1000000-0000-0000-0000-000000000003",
       "name": "Validações Fiscais NF-e",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-200, 0]
+      "position": [
+        -100,
+        0
+      ]
     },
     {
       "parameters": {
@@ -46,17 +68,23 @@
       "name": "Buscar Pedido S4 (ME23N)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// ===== Three-way match (Pedido x NF-e x qtde aberta) + validação tributária =====\nconst nf = $('Validações Fiscais NF-e').item.json;\nconst po = $json;\nconst div = [...(nf.errosEstruturais || [])];\n\nconst itens = po.Items || [];\nconst item = itens.find(i => Number(i.PurchaseOrderItem) === Number(nf.itemPedido)) ?? itens[0];\nif (!item) div.push(`Item ${nf.itemPedido} não encontrado no pedido ${nf.pedido}`);\n\n// Fornecedor: CNPJ do emitente da NF-e deve ser o CNPJ do fornecedor do pedido\nif (po.Supplier?.TaxNumber1 && po.Supplier.TaxNumber1 !== nf.cnpjEmitente) {\n  div.push(`CNPJ emitente ${nf.cnpjEmitente} diverge do fornecedor do pedido (${po.Supplier.TaxNumber1})`);\n}\n\nif (item) {\n  // Preço (tolerância 1% - espelha OMR6)\n  if (Math.abs(Number(item.NetPriceAmount) - nf.valorUnitario) > Number(item.NetPriceAmount) * 0.01) {\n    div.push(`Preço unitário da NF (${nf.valorUnitario}) diverge do pedido (${item.NetPriceAmount})`);\n  }\n  // Quantidade aberta\n  const aberta = Number(item.OrderQuantity) - Number(item.QuantityDelivered);\n  if (nf.quantidade > aberta) {\n    div.push(`Quantidade da NF (${nf.quantidade}) excede a qtde aberta do pedido (${aberta})`);\n  }\n  // CFOP de entrada esperado (determinação de CFOP da localização BR)\n  if (item.CFOPExpected && nf.cfopEntrada !== item.CFOPExpected) {\n    div.push(`CFOP de entrada ${nf.cfopEntrada} (derivado de ${nf.cfopSaida}) diverge do esperado ${item.CFOPExpected}`);\n  }\n  // NCM\n  if (item.NCM && String(item.NCM) !== nf.ncm) {\n    div.push(`NCM da NF (${nf.ncm}) diverge do cadastro do material (${item.NCM})`);\n  }\n}\n\n// Consistência do imposto destacado: vICMS = vBC x alíquota\nconst icmsCalc = nf.vBC * nf.pICMS / 100;\nif (Math.abs(icmsCalc - nf.vICMS) > 0.02) {\n  div.push(`vICMS destacado (${nf.vICMS}) inconsistente com base x alíquota (${icmsCalc.toFixed(2)})`);\n}\n// Regra fiscal da operação: interna MG, contribuinte, esperado 18%\nif (nf.pICMS !== 18) {\n  div.push(`Alíquota de ICMS ${nf.pICMS}% diverge dos 18% esperados para operação interna MG (J1BTAX)`);\n}\n\nreturn [{ json: {\n  aprovado: div.length === 0,\n  divergencias: div,\n  nf,\n  migo: {\n    PurchaseOrder: nf.pedido,\n    PurchaseOrderItem: item ? item.PurchaseOrderItem : nf.itemPedido,\n    QuantityInEntryUnit: nf.quantidade,\n    NFeAccessKey: nf.chave\n  },\n  miro: {\n    PurchaseOrder: nf.pedido,\n    Supplier: po.Supplier?.Supplier,\n    InvoiceGrossAmount: nf.valorTotalNF,\n    NFeAccessKey: nf.chave,\n    NFeNumber: nf.numeroNF,\n    CFOP: nf.cfopSaida,\n    TaxAmountICMS: nf.vICMS,\n    TaxAmountIPI: nf.vIPI\n  }\n} }];"
+        "jsCode": "// ===== Confronto NF-e x Pedido de compra + validação tributária =====\n// O three-way match propriamente dito (pedido x entrada de mercadoria x fatura)\n// é feito pelo sistema de registro na MIRO, quando a entrada já existe.\nconst nf = $('Validações Fiscais NF-e').item.json;\nconst po = $json;\nconst div = [...(nf.errosEstruturais || [])];\n\nconst itens = po.Items || [];\nconst item = itens.find(i => Number(i.PurchaseOrderItem) === Number(nf.itemPedido)) ?? itens[0];\nif (!item) div.push(`Item ${nf.itemPedido} não encontrado no pedido ${nf.pedido}`);\n\n// Fornecedor: CNPJ do emitente da NF-e deve ser o CNPJ do fornecedor do pedido\nif (po.Supplier?.TaxNumber1 && po.Supplier.TaxNumber1 !== nf.cnpjEmitente) {\n  div.push(`CNPJ emitente ${nf.cnpjEmitente} diverge do fornecedor do pedido (${po.Supplier.TaxNumber1})`);\n}\n\nif (item) {\n  // Preço (tolerância 1% - espelha a chave PP da OMR6)\n  if (Math.abs(Number(item.NetPriceAmount) - nf.valorUnitario) > Number(item.NetPriceAmount) * 0.01) {\n    div.push(`Preço unitário da NF (${nf.valorUnitario}) diverge do pedido (${item.NetPriceAmount})`);\n  }\n  // Quantidade aberta\n  const aberta = Number(item.OrderQuantity) - Number(item.QuantityDelivered);\n  if (nf.quantidade > aberta) {\n    div.push(`Quantidade da NF (${nf.quantidade}) excede a qtde aberta do pedido (${aberta})`);\n  }\n  if (item.CFOPExpected) {\n    // Abrangência geográfica da operação\n    if (nf.digitoEntrada && nf.digitoEntrada !== item.CFOPExpected[0]) {\n      div.push(`Abrangência da operação: CFOP ${nf.cfopSaida} do fornecedor não corresponde ao CFOP de entrada ${item.CFOPExpected} do item`);\n    }\n    // Natureza da operação: o que o fornecedor fez precisa ser compatível com a\n    // destinação que o comprador dá ao material (cadastro do material / tipo de item)\n    const compat = { '101': ['101', '102'], '102': ['101', '102'], '551': ['551'], '556': ['556'], '910': ['910'] };\n    const permitidos = compat[nf.cfopSaida.slice(1)];\n    const destino = String(item.CFOPExpected).slice(1);\n    if (!permitidos) div.push(`CFOP de saída ${nf.cfopSaida} sem natureza mapeada para entrada`);\n    else if (!permitidos.includes(destino)) {\n      div.push(`CFOP ${nf.cfopSaida} incompatível com a destinação do material (CFOP de entrada ${item.CFOPExpected})`);\n    }\n  }\n  // NCM\n  if (item.NCM && String(item.NCM) !== nf.ncm) {\n    div.push(`NCM da NF (${nf.ncm}) diverge do cadastro do material (${item.NCM})`);\n  }\n}\n\n// Consistência do imposto destacado: vICMS = vBC x alíquota\nconst icmsCalc = nf.vBC * nf.pICMS / 100;\nif (Math.abs(icmsCalc - nf.vICMS) > 0.02) {\n  div.push(`vICMS destacado (${nf.vICMS}) inconsistente com base x alíquota (${icmsCalc.toFixed(2)})`);\n}\n// Alíquota da operação: interna MG, regra geral 18% (art. 42, I, \"e\" do RICMS/MG)\nif (nf.pICMS !== 18) {\n  div.push(`Alíquota de ICMS ${nf.pICMS}% diverge dos 18% esperados para operação interna MG`);\n}\n\nreturn [{ json: {\n  aprovado: div.length === 0,\n  divergencias: div,\n  nf,\n  migo: {\n    PurchaseOrder: nf.pedido,\n    PurchaseOrderItem: item ? item.PurchaseOrderItem : nf.itemPedido,\n    QuantityInEntryUnit: nf.quantidade,\n    NFeAccessKey: nf.chave\n  },\n  miro: {\n    PurchaseOrder: nf.pedido,\n    Supplier: po.Supplier?.Supplier,\n    InvoiceGrossAmount: nf.valorTotalNF,\n    NFeAccessKey: nf.chave,\n    NFeNumber: nf.numeroNF,\n    CFOP: nf.cfopSaida,\n    TaxAmountICMS: nf.vICMS,\n    TaxAmountIPI: nf.vIPI\n  }\n} }];"
       },
       "id": "a1000000-0000-0000-0000-000000000005",
-      "name": "Three-way Match Fiscal",
+      "name": "Conferência NF-e x Pedido",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [200, 0]
+      "position": [
+        200,
+        0
+      ]
     },
     {
       "parameters": {
@@ -85,7 +113,10 @@
       "name": "Aprovado?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [400, 0]
+      "position": [
+        400,
+        0
+      ]
     },
     {
       "parameters": {
@@ -100,7 +131,10 @@
       "name": "Lançar MIGO (Entrada 101)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [620, -120]
+      "position": [
+        620,
+        -120
+      ]
     },
     {
       "parameters": {
@@ -108,26 +142,32 @@
         "url": "http://host.docker.internal:4004/inbound/SupplierInvoices",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($('Three-way Match Fiscal').item.json.miro) }}",
+        "jsonBody": "={{ JSON.stringify($('Conferência NF-e x Pedido').item.json.miro) }}",
         "options": {}
       },
       "id": "a1000000-0000-0000-0000-000000000008",
       "name": "Lançar MIRO (Fatura)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [820, -120]
+      "position": [
+        820,
+        -120
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: 'LANÇADO', chaveNFe: $('Three-way Match Fiscal').item.json.nf.chave, materialDocument: $('Lançar MIGO (Entrada 101)').item.json.MaterialDocument, supplierInvoice: $json.SupplierInvoice, mensagem: 'Entrada de mercadoria e fatura lançadas com sucesso' }) }}",
+        "responseBody": "={{ JSON.stringify({ status: 'LANÇADO', chaveNFe: $('Conferência NF-e x Pedido').item.json.nf.chave, materialDocument: $('Lançar MIGO (Entrada 101)').item.json.MaterialDocument, supplierInvoice: $json.SupplierInvoice, mensagem: 'Entrada de mercadoria e fatura lançadas com sucesso' }) }}",
         "options": {}
       },
       "id": "a1000000-0000-0000-0000-000000000009",
       "name": "Resposta Sucesso",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1020, -120]
+      "position": [
+        1020,
+        -120
+      ]
     },
     {
       "parameters": {
@@ -141,38 +181,122 @@
       "name": "Resposta Divergência",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [620, 140]
+      "position": [
+        620,
+        140
+      ]
     }
   ],
   "connections": {
     "Webhook NF-e": {
-      "main": [[{ "node": "Parse XML NF-e", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Extrai XML do payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Parse XML NF-e": {
-      "main": [[{ "node": "Validações Fiscais NF-e", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Validações Fiscais NF-e",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Validações Fiscais NF-e": {
-      "main": [[{ "node": "Buscar Pedido S4 (ME23N)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Buscar Pedido S4 (ME23N)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Buscar Pedido S4 (ME23N)": {
-      "main": [[{ "node": "Three-way Match Fiscal", "type": "main", "index": 0 }]]
-    },
-    "Three-way Match Fiscal": {
-      "main": [[{ "node": "Aprovado?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Conferência NF-e x Pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Aprovado?": {
       "main": [
-        [{ "node": "Lançar MIGO (Entrada 101)", "type": "main", "index": 0 }],
-        [{ "node": "Resposta Divergência", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Lançar MIGO (Entrada 101)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resposta Divergência",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Lançar MIGO (Entrada 101)": {
-      "main": [[{ "node": "Lançar MIRO (Fatura)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Lançar MIRO (Fatura)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Lançar MIRO (Fatura)": {
-      "main": [[{ "node": "Resposta Sucesso", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Resposta Sucesso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferência NF-e x Pedido": {
+      "main": [
+        [
+          {
+            "node": "Aprovado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrai XML do payload": {
+      "main": [
+        [
+          {
+            "node": "Parse XML NF-e",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "pinData": {}
 }

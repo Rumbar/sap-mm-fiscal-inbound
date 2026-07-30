@@ -39,7 +39,7 @@ entity PurchaseOrderItems {
       NetPriceAmount    : Decimal(11, 2);      // NETPR
       TaxCode           : String(2);           // MWSKZ (ex.: I1, C1 - J1BTAX)
       NCM               : String(8);           // classificação fiscal
-      CFOPExpected      : String(4);           // CFOP de ENTRADA esperado (ex.: 1102)
+      CFOPExpected      : String(4);           // CFOP de ENTRADA esperado (ex.: 1101), do cadastro do material
 }
 
 entity MaterialDocuments {

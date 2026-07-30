@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">
   <NFe>
-    <infNFe Id="NFe31260712345678000195550010000012351000123501" versao="4.00">
+    <infNFe Id="NFe31260712345678000195550010000012401000124001" versao="4.00">
       <ide><cUF>31</cUF><natOp>VENDA DE PRODUCAO DO ESTABELECIMENTO</natOp><mod>55</mod>
-        <serie>1</serie><nNF>1235</nNF><dhEmi>2026-07-01T09:00:00-03:00</dhEmi>
+        <serie>1</serie><nNF>1240</nNF><dhEmi>2026-07-01T09:00:00-03:00</dhEmi>
         <tpNF>1</tpNF><idDest>1</idDest><cMunFG>3106200</cMunFG></ide>
       <emit><CNPJ>12345678000195</CNPJ><xNome>Metalurgica Horizonte Ltda</xNome>
         <enderEmit><xMun>Belo Horizonte</xMun><UF>MG</UF></enderEmit>
@@ -12,18 +12,18 @@
         <enderDest><xMun>Contagem</xMun><UF>MG</UF></enderDest></dest>
       <det nItem="1">
         <prod><cProd>MAT-CHAPA-AC01</cProd><xProd>CHAPA DE ACO 1020 3MM</xProd>
-          <NCM>72085300</NCM><CFOP>5101</CFOP><uCom>PC</uCom>
-          <qCom>100.0000</qCom><vUnCom>275.00</vUnCom><vProd>27500.00</vProd>
+          <NCM>72085100</NCM><CFOP>5101</CFOP><uCom>PC</uCom>
+          <qCom>100.0000</qCom><vUnCom>250.00</vUnCom><vProd>25000.00</vProd>
           <xPed>4500000101</xPed><nItemPed>10</nItemPed></prod>
         <imposto>
-          <ICMS><ICMS00><orig>0</orig><CST>00</CST><vBC>27500.00</vBC>
-            <pICMS>18.00</pICMS><vICMS>4950.00</vICMS></ICMS00></ICMS>
-          <IPI><IPITrib><CST>50</CST><vBC>27500.00</vBC>
-            <pIPI>5.00</pIPI><vIPI>1375.00</vIPI></IPITrib></IPI>
+          <ICMS><ICMS00><orig>0</orig><CST>00</CST><vBC>25000.00</vBC>
+            <pICMS>18.00</pICMS><vICMS>4500.00</vICMS></ICMS00></ICMS>
+          <IPI><IPITrib><CST>50</CST><vBC>25000.00</vBC>
+            <pIPI>5.00</pIPI><vIPI>1250.00</vIPI></IPITrib></IPI>
         </imposto>
       </det>
-      <total><ICMSTot><vBC>27500.00</vBC><vICMS>4950.00</vICMS>
-        <vIPI>1375.00</vIPI><vProd>27500.00</vProd><vNF>28875.00</vNF></ICMSTot></total>
+      <total><ICMSTot><vBC>25000.00</vBC><vICMS>4500.00</vICMS>
+        <vIPI>1250.00</vIPI><vProd>25000.00</vProd><vNF>26250.00</vNF></ICMSTot></total>
     </infNFe>
   </NFe>
 </nfeProc>

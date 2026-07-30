@@ -31,9 +31,13 @@ function validacoesFiscais(xml) {
   else if (dv !== chave[43]) erros.push(`DV da chave inválido (calc ${dv}, informado ${chave[43]})`);
 
   const cfopSaida = tag(xml, 'CFOP');
+  // Só o primeiro dígito é derivável do CFOP do fornecedor: ele indica a
+  // abrangência geográfica da operação (5=interna, 6=interestadual, 7=exterior).
+  // Os três últimos dígitos do CFOP de ENTRADA vêm da destinação que o comprador
+  // dá ao material, e não da operação do vendedor.
   const mapa = { 5: '1', 6: '2', 7: '3' };
-  const cfopEntrada = (mapa[cfopSaida[0]] ?? '?') + cfopSaida.slice(1);
-  if (!mapa[cfopSaida[0]]) erros.push(`CFOP ${cfopSaida} não é de saída (5xxx/6xxx/7xxx)`);
+  const digitoEntrada = mapa[cfopSaida[0]];
+  if (!digitoEntrada) erros.push(`CFOP ${cfopSaida} não é de saída (5xxx/6xxx/7xxx)`);
 
   const emit = tag(xml, 'emit'), icms = tag(xml, 'ICMS00') || '', ipi = tag(xml, 'IPITrib') || '';
   return {
@@ -41,7 +45,7 @@ function validacoesFiscais(xml) {
     cnpjEmitente: tag(emit, 'CNPJ'), nomeEmitente: tag(emit, 'xNome'),
     numeroNF: tag(xml, 'nNF'),
     pedido: tag(xml, 'xPed'), itemPedido: String(tag(xml, 'nItemPed')).padStart(5, '0'),
-    ncm: tag(xml, 'NCM'), cfopSaida, cfopEntrada,
+    ncm: tag(xml, 'NCM'), cfopSaida, digitoEntrada,
     quantidade: Number(tag(xml, 'qCom')), valorUnitario: Number(tag(xml, 'vUnCom')),
     vBC: Number(tag(icms, 'vBC')), pICMS: Number(tag(icms, 'pICMS')), vICMS: Number(tag(icms, 'vICMS')),
     vIPI: Number(tag(ipi, 'vIPI')),
@@ -49,8 +53,11 @@ function validacoesFiscais(xml) {
   };
 }
 
-// ===== Nó "Three-way Match Fiscal" =====
-function threeWayMatch(nf, po) {
+// ===== Nó "Conferência NF-e x Pedido" =====
+// Confronto documento fiscal x pedido de compra. O three-way match propriamente
+// dito (pedido x entrada de mercadoria x fatura) é feito pelo sistema de registro
+// no momento da MIRO, quando a entrada já existe.
+function confereNfContraPedido(nf, po) {
   const div = [...nf.errosEstruturais];
   const item = (po.Items || []).find(i => Number(i.PurchaseOrderItem) === Number(nf.itemPedido)) ?? po.Items?.[0];
   if (!item) div.push(`Item ${nf.itemPedido} não encontrado no pedido`);
@@ -61,8 +68,19 @@ function threeWayMatch(nf, po) {
       div.push(`Preço NF (${nf.valorUnitario}) diverge do pedido (${item.NetPriceAmount})`);
     const aberta = item.OrderQuantity - item.QuantityDelivered;
     if (nf.quantidade > aberta) div.push(`Qtde NF (${nf.quantidade}) excede qtde aberta (${aberta})`);
-    if (item.CFOPExpected && nf.cfopEntrada !== item.CFOPExpected)
-      div.push(`CFOP entrada ${nf.cfopEntrada} diverge do esperado ${item.CFOPExpected}`);
+    if (item.CFOPExpected) {
+      // Abrangência geográfica: interna x interestadual x exterior
+      if (nf.digitoEntrada && nf.digitoEntrada !== item.CFOPExpected[0])
+        div.push(`Abrangência da operação: CFOP ${nf.cfopSaida} do fornecedor não corresponde ao CFOP de entrada ${item.CFOPExpected} do item`);
+      // Natureza da operação: o que o fornecedor fez precisa ser compatível
+      // com a destinação que o comprador dá ao material
+      const compat = { '101': ['101', '102'], '102': ['101', '102'], '551': ['551'], '556': ['556'], '910': ['910'] };
+      const permitidos = compat[nf.cfopSaida.slice(1)];
+      const destino = item.CFOPExpected.slice(1);
+      if (!permitidos) div.push(`CFOP de saída ${nf.cfopSaida} sem natureza mapeada para entrada`);
+      else if (!permitidos.includes(destino))
+        div.push(`CFOP ${nf.cfopSaida} incompatível com a destinação do material (CFOP de entrada ${item.CFOPExpected})`);
+    }
     if (item.NCM && String(item.NCM) !== nf.ncm) div.push(`NCM ${nf.ncm} diverge do cadastro ${item.NCM}`);
   }
   const icmsCalc = nf.vBC * nf.pICMS / 100;
@@ -83,7 +101,7 @@ function threeWayMatch(nf, po) {
   if (!rPo.ok) { console.log(`BLOQUEADO: pedido ${nf.pedido} não encontrado no S/4`); return; }
   const po = await rPo.json();
 
-  const match = threeWayMatch(nf, po);
+  const match = confereNfContraPedido(nf, po);
   if (!match.aprovado) {
     console.log('STATUS: BLOQUEADO (fila de pendências fiscais)');
     match.divergencias.forEach(d => console.log('  - ' + d));

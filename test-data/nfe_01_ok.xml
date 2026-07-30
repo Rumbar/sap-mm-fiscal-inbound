@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">
   <NFe>
-    <infNFe Id="NFe31260712345678000199550010000012341000123404" versao="4.00">
-      <ide><cUF>31</cUF><natOp>VENDA DE PRODUCAO</natOp><mod>55</mod>
+    <infNFe Id="NFe31260712345678000195550010000012341000123407" versao="4.00">
+      <ide><cUF>31</cUF><natOp>VENDA DE PRODUCAO DO ESTABELECIMENTO</natOp><mod>55</mod>
         <serie>1</serie><nNF>1234</nNF><dhEmi>2026-07-01T09:00:00-03:00</dhEmi>
         <tpNF>1</tpNF><idDest>1</idDest><cMunFG>3106200</cMunFG></ide>
-      <emit><CNPJ>12345678000199</CNPJ><xNome>Metalurgica Horizonte Ltda</xNome>
+      <emit><CNPJ>12345678000195</CNPJ><xNome>Metalurgica Horizonte Ltda</xNome>
         <enderEmit><xMun>Belo Horizonte</xMun><UF>MG</UF></enderEmit>
         <IE>0623456789</IE><CRT>3</CRT></emit>
       <dest><CNPJ>11222333000181</CNPJ><xNome>Industria Compradora SA</xNome>
         <enderDest><xMun>Contagem</xMun><UF>MG</UF></enderDest></dest>
       <det nItem="1">
         <prod><cProd>MAT-CHAPA-AC01</cProd><xProd>CHAPA DE ACO 1020 3MM</xProd>
-          <NCM>72085100</NCM><CFOP>5102</CFOP><uCom>PC</uCom>
+          <NCM>72085300</NCM><CFOP>5101</CFOP><uCom>PC</uCom>
           <qCom>100.0000</qCom><vUnCom>250.00</vUnCom><vProd>25000.00</vProd>
           <xPed>4500000101</xPed><nItemPed>10</nItemPed></prod>
         <imposto>
