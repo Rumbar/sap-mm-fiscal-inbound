@@ -12,7 +12,8 @@ const cds = require('@sap/cds');
  * MIRO (SupplierInvoices):
  *  - Three-way match: PO x Entrada de mercadoria x Fatura
  *  - Valor bruto deve bater com (qtde recebida x preço líquido) + IPI,
- *    com tolerância de 1% (equivale às chaves de tolerância OMR6 / bloqueio R)
+ *    com tolerância de 1% (equivale à chave PP da OMR6; no SAP o bloqueio
+ *    automático grava MRM_ZLSPR='A' em RBKP_BLOCKED e se libera pela MRBR)
  *  - Precisa existir entrada de mercadoria (GR-based IV)
  *  - Gera BELNR sequencial 51056000xx
  */
@@ -74,7 +75,7 @@ module.exports = class InboundService extends cds.ApplicationService {
       const tolerance = expected * 0.01; // 1% (OMR6)
       if (diff > tolerance)
         return req.reject(409,
-          `Bloqueio de fatura (R): valor ${d.InvoiceGrossAmount} diverge do esperado ${expected.toFixed(2)} (tolerância 1%)`);
+          `Fatura bloqueada para pagamento - variação de preço (chave PP), liberação via MRBR: valor ${d.InvoiceGrossAmount} diverge do esperado ${expected.toFixed(2)} (tolerância 1%)`);
 
       // Duplicidade de NF-e (chave já lançada)
       if (d.NFeAccessKey) {

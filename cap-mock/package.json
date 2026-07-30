@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Mock CAP de APIs S/4HANA para processo MM inbound fiscal (MIGO/MIRO + NF-e)",
   "scripts": {
-    "start": "cds serve --port 4004"
+    "start": "cds-serve --port 4004"
   },
   "dependencies": {
     "@sap/cds": "^8",

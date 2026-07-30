@@ -36,7 +36,7 @@ Documento de evidência. Cada caso abaixo foi executado e o resultado obtido est
 
 | | |
 |---|---|
-| **Regras exercitadas** | M4 (tolerância OMR6) |
+| **Regras exercitadas** | M4 (tolerância de preço — chave PP / OMR6) |
 | **Entrada** | `nfe_02_preco_divergente.xml` — R$ 275,00 contra R$ 250,00 do pedido (+10%) |
 | **Resultado esperado** | Bloqueio; divergência acima da tolerância de 1% |
 | **Resultado obtido** | `STATUS: BLOQUEADO` — *Preço NF (275) diverge do pedido (250)* |
@@ -122,16 +122,17 @@ Estes casos foram executados por chamada direta às APIs, **contornando o orques
 
 ---
 
-### CT-09 — Bloqueio de fatura por divergência de valor
+### CT-09 — Bloqueio automático de fatura por divergência de valor
 
 | | |
 |---|---|
 | **Regras exercitadas** | S4 |
 | **Pré-condição** | MIGO de 500 L lançada no pedido 4500000102 (500 × R$ 18,50 = R$ 9.250,00) |
 | **Ação** | POST em `SupplierInvoices` com valor bruto de R$ 11.000,00 |
-| **Resultado esperado** | Bloqueio R; divergência de R$ 1.750,00 excede a tolerância de 1% |
-| **Resultado obtido** | `HTTP 409` — *Bloqueio de fatura (R): valor 11000 diverge do esperado 9250.00 (tolerância 1%)* |
+| **Resultado esperado** | Bloqueio automático da fatura para pagamento; divergência de R$ 1.750,00 excede a tolerância de 1% |
+| **Resultado obtido** | `HTTP 409` — *Fatura bloqueada para pagamento - variação de preço (chave PP), liberação via MRBR: valor 11000 diverge do esperado 9250.00 (tolerância 1%)* |
 | **Status** | ✅ Aprovado |
+| **Observação funcional** | No S/4HANA a fatura seria lançada e bloqueada para pagamento, ficando pendente de liberação na MRBR. Neste modelo ela é rejeitada — simplificação assumida por não haver fluxo de liberação. |
 
 ---
 
@@ -143,7 +144,7 @@ Estes casos foram executados por chamada direta às APIs, **contornando o orques
 | B — Regras do sistema de registro | 4 | 4 | 0 |
 | **Total** | **9** | **9** | **0** |
 
-Cobertura das regras da matriz: E1–E4, M1–M7, S1–S5.
+Cobertura das regras da matriz: E1–E4, M1–M7, S1–S5. A regra S6 (liberação de fatura bloqueada via MRBR) não é testada por não haver fluxo de liberação implementado.
 
 ---
 
